@@ -43,6 +43,12 @@ String fleetDashboardDescription();
 // runs out of memory against this server's certificate chain.)
 void fleetRequestStartupCheck();
 
+// "Update OSSM" did not work from the remote's menu (the machine is too old,
+// or stuck on its error screen): ask the dashboard to update that machine
+// instead. The remote restarts and asks at start-up, where it has memory for
+// TLS. The answer shows on the Dashboard page.
+void fleetRequestMachineUpdate(const char *machineAddress);
+
 // Called by the serial identity reader for every line it cannot interpret.
 // Returns true when the line was meant for the fleet client.
 bool fleetSerialCommand(const char *line);

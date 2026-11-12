@@ -54,6 +54,7 @@ constexpr uint32_t CRASHES_FOR_SAFE_MODE = 3;
 // ---------------------------------------------------------------------------
 constexpr uint32_t RTC_MAGIC = 0xF1EE7AD2;
 constexpr uint32_t CHECK_AT_START = 0xC4EC4A7D;
+constexpr uint32_t ASK_MACHINE_UPDATE = 0xA5C0DA7E;
 constexpr size_t LOG_RING_BYTES = 3072;
 
 RTC_NOINIT_ATTR uint32_t rtcMagic;
@@ -62,6 +63,8 @@ RTC_NOINIT_ATTR uint32_t logHead;    // next byte to write
 RTC_NOINIT_ATTR uint32_t logLength;  // bytes in the ring
 RTC_NOINIT_ATTR char logRing[LOG_RING_BYTES];
 RTC_NOINIT_ATTR uint32_t checkAtStartMagic;  // set by the menu's update entry
+RTC_NOINIT_ATTR uint32_t askMachineMagic;    // set when a machine update is requested
+RTC_NOINIT_ATTR char askMachineAddress[20];
 RTC_NOINIT_ATTR int32_t pendingResultId;  // 0 = none
 RTC_NOINIT_ATTR uint32_t pendingResultOk;
 RTC_NOINIT_ATTR char pendingResultDetail[80];
@@ -106,7 +109,9 @@ void evaluateLastReset() {
         logLength = 0;
         pendingResultId = 0;
         checkAtStartMagic = 0;
+        askMachineMagic = 0;
     }
+    askMachineAddress[sizeof(askMachineAddress) - 1] = '\0';
     pendingResultDetail[sizeof(pendingResultDetail) - 1] = '\0';
     crashStreak = crashed ? crashStreak + 1 : 0;
     safeMode = crashStreak >= CRASHES_FOR_SAFE_MODE;
@@ -308,6 +313,9 @@ struct CheckinResult {
     String channel;
     String latestVersion;
     bool updateAvailable = false;
+    // The dashboard's answer to "update my machine".
+    bool answeredMachineRequest = false;
+    String machineRequestMessage;
 };
 
 CheckinResult checkinResult;
@@ -351,6 +359,13 @@ void buildReport(JsonDocument &report, const String &logs) {
         result["detail"] = pendingResultDetail;
     }
 
+    // A machine update asked for before the last restart.
+    if (askMachineMagic == ASK_MACHINE_UPDATE && askMachineAddress[0] != '\0') {
+        JsonObject request = report["requests"].to<JsonArray>().add<JsonObject>();
+        request["type"] = "updateOssm";
+        request["mac"] = askMachineAddress;
+    }
+
     if (!logs.isEmpty()) {
         JsonArray lines = report["logs"].to<JsonArray>();
         int start = 0;
@@ -388,6 +403,11 @@ void checkinTask(void *) {
             checkinResult.channel = dashboard["channel"] | "";
             checkinResult.latestVersion = dashboard["latestVersion"] | "";
             checkinResult.updateAvailable = dashboard["updateAvailable"] | false;
+            JsonObjectConst answer = reply["requestResults"][0].as<JsonObjectConst>();
+            if (!answer.isNull()) {
+                checkinResult.answeredMachineRequest = true;
+                checkinResult.machineRequestMessage = answer["message"] | "";
+            }
             for (JsonObjectConst item : reply["commands"].as<JsonArrayConst>()) {
                 Command command;
                 command.id = item["id"] | 0;
@@ -553,6 +573,27 @@ bool fleetSerialCommand(const char *line) {
     return true;
 }
 
+void fleetRequestMachineUpdate(const char *machineAddress) {
+    if (machineAddress == nullptr || machineAddress[0] == '\0') {
+        // Nothing to ask about: say so on the Dashboard page, do not restart.
+        Preferences state;
+        if (state.begin("fleet", false)) {
+            state.putString("dmach", "Could not read the machine's address.");
+            state.end();
+        }
+        return;
+    }
+    strncpy(askMachineAddress, machineAddress, sizeof(askMachineAddress) - 1);
+    askMachineAddress[sizeof(askMachineAddress) - 1] = '\0';
+    askMachineMagic = ASK_MACHINE_UPDATE;
+    xTaskCreate(
+        [](void *) {
+            vTaskDelay(pdMS_TO_TICKS(1500));
+            ESP.restart();
+        },
+        "fleetRestart", 2048, nullptr, 1, nullptr);
+}
+
 void fleetRequestStartupCheck() {
     checkAtStartMagic = CHECK_AT_START;
     // Let the screen show the message before the restart.
@@ -565,7 +606,7 @@ void fleetRequestStartupCheck() {
 }
 
 String fleetDashboardDescription() {
-    String name, channel, latest, last, check;
+    String name, channel, latest, last, check, machine;
     bool available = false;
     Preferences state;
     if (state.begin("fleet", false)) {  // read-write: creates the namespace
@@ -574,6 +615,7 @@ String fleetDashboardDescription() {
         latest = state.getString("dlatest", "");
         last = state.getString("dlast", "");
         check = state.getString("dcheck", "");
+        machine = state.getString("dmach", "");
         available = state.getBool("davail", false);
         state.end();
     }
@@ -587,6 +629,7 @@ String fleetDashboardDescription() {
     text += "\nUpdates: " + (channel.isEmpty() ? String("manual") : channel);
     text += "\nLast check-in: " + last;
     if (!check.isEmpty()) text += "\nUpdate check: " + check;
+    if (!machine.isEmpty()) text += "\nMachine: " + machine;
     if (available && !latest.isEmpty()) {
         text += "\nNew firmware " + latest + " is waiting.\nChoose Check for updates.";
     } else if (last == "OK") {
@@ -652,6 +695,15 @@ void fleetBootCheckin() {
         ESP_LOGW(TAG, "Check-in skipped: Wi-Fi did not connect");
     }
 
+    if (askMachineMagic == ASK_MACHINE_UPDATE) {
+        askMachineMagic = 0;  // asked once, whatever the outcome
+        if (state.begin("fleet", false)) {
+            state.putString("dmach", success && checkinResult.answeredMachineRequest
+                                         ? checkinResult.machineRequestMessage
+                                         : String("The dashboard could not be reached."));
+            state.end();
+        }
+    }
     if (state.begin("fleet", false)) {
         state.putUInt("fails", success ? 0 : failures + 1);
         // What the Dashboard page shows. Kept from the last start, so it also
@@ -710,6 +762,7 @@ void fleetBootCheckin() {
 
 String fleetDashboardDescription() { return ""; }
 void fleetRequestStartupCheck() {}
+void fleetRequestMachineUpdate(const char *) {}
 void fleetEarlyInit() {}
 void fleetBootCheckin() {}
 bool fleetSerialCommand(const char *) { return false; }

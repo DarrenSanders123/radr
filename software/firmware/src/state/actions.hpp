@@ -288,6 +288,12 @@ namespace actions {
         xTimerStart(ossmUpdateTimer, 0);
     };
 
+    // Fleet builds: ask the dashboard to update the connected machine.
+    inline auto fleetAskMachineUpdate = []() {
+        const std::string address = ossmMacAddress();
+        fleetRequestMachineUpdate(address.c_str());
+    };
+
     // Fleet builds: "Check for updates" restarts the remote and checks at start-up.
     inline auto fleetCheckAtStartup = []() { fleetRequestStartupCheck(); };
 

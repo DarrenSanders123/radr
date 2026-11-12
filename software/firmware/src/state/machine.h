@@ -254,11 +254,23 @@ struct ossm_remote_state {
             "ossm_update_check"_s + event<ossm_state_event>[ossmInState<>("update.installing")] = "ossm_update_updating"_s,
             "ossm_update_check"_s + event<ossm_state_event>[ossmInState<>("update.failed")] / drawOssmUpdateFailed = "ossm_update_failed"_s,
             "ossm_update_check"_s + event<ossm_no_wifi_event> = "ossm_update_wifi"_s,
+#ifdef FLEET_SERVER
+            // The machine did not take part (too old, or on its error screen):
+            // ask the dashboard to update it instead.
+            "ossm_update_check"_s + event<ossm_unsupported_event> = "ossm_dashboard_update"_s,
+#else
             "ossm_update_check"_s + event<ossm_unsupported_event> = "ossm_unsupported"_s,
+#endif
             "ossm_update_check"_s + event<task_failed_event> / drawOssmUpdateOutOfMemory = "ossm_update_failed"_s,
             "ossm_update_check"_s + event<left_button_pressed> = "main_menu"_s,
             "ossm_update_check"_s + event<disconnected_event> / disconnect = "main_menu"_s,
 
+#ifdef FLEET_SERVER
+            "ossm_dashboard_update"_s + on_entry<_> / (drawPage(ossmDashboardUpdatePage), fleetAskMachineUpdate),
+            "ossm_dashboard_update"_s + event<left_button_pressed> = "main_menu"_s,
+            "ossm_dashboard_update"_s + event<disconnected_event> / disconnect = "main_menu"_s,
+
+#endif
             // The OSSM waits in update.available until we confirm (second go:update)
             // or cancel (back to the main menu sends go:menu).
             "ossm_update_available"_s + event<right_button_pressed> / sendOssmInstall = "ossm_update_updating"_s,

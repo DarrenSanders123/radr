@@ -60,6 +60,17 @@ static const TextPage wifiConnectedPage = {
     .description = WIFI_CONNECTED_DESCRIPTION,
     .leftButtonText = GO_BACK};
 
+#ifdef FLEET_SERVER
+// Shown when "Update OSSM" cannot run from the remote's menu: the dashboard
+// is asked to update the machine instead (see fleetRequestMachineUpdate).
+static const TextPage ossmDashboardUpdatePage = {
+    .title = "Update via dashboard",
+    .description = "The OSSM cannot update\nfrom here. Asking\n" FLEET_HOST
+                   "\nto update it. The remote restarts.",
+    .leftButtonText = CANCEL_STRING,
+};
+#endif
+
 // Self-update result pages (defined in genericPages.cpp)
 extern const TextPage updateUpToDatePage;
 extern const TextPage updateFailedPage;

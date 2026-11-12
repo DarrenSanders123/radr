@@ -63,6 +63,10 @@ static constexpr uint32_t OSSM_RESPONSE_TIMEOUT_MS = 10000;
 static constexpr uint32_t OSSM_POLL_INTERVAL_MS = 400;
 
 // Reads the OSSM pairing characteristic; empty on any failure.
+static std::string lastOssmMac;
+
+std::string ossmMacAddress() { return lastOssmMac; }
+
 static std::string readOssmPairingInfo() {
     if (device == nullptr || !device->isConnected) return "";
     auto it = device->characteristics.find("pairing");
@@ -128,6 +132,9 @@ static void ossmUpdateTask(void *) {
         vTaskDelete(nullptr);
         return;
     }
+
+    // Pairing info is "MAC;chip;wifiConnected;md5;version".
+    lastOssmMac = pairingInfo.substr(0, pairingInfo.find(';'));
 
     if (!pairingInfoHasWifi(pairingInfo)) {
         fireStateMachineOssmNoWifiEvent();
