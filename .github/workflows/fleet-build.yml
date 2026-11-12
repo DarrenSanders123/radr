@@ -133,6 +133,7 @@ jobs:
             -F "bootloader=@.pio/build/fleet/bootloader.bin" \
             -F "partitions=@.pio/build/fleet/partitions.bin" \
             -F "filesystem=@.pio/build/fleet/littlefs.bin" \
+            -F "filesystem_fingerprint=$(python3 ../scripts/fleet_registry_fingerprint.py data)" \
             -F "version=$version" \
             -F "build_sha=$(git rev-parse HEAD)" \
             -F "upstream_sha=${{ steps.merge.outputs.upstream_sha }}" \
