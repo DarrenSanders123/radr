@@ -77,6 +77,10 @@ const auto isOssmSettingFieldSelected = []() -> bool {
     return ossmSettings::isFieldSelected();
 };
 
+const auto ossmSettingsUnsupported = []() -> bool {
+    return ossmSettings::isUnsupported();
+};
+
 const auto hasPendingOssmSettings = []() -> bool {
     return ossmSettings::hasPending();
 };

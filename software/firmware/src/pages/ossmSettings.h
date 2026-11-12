@@ -15,6 +15,10 @@ namespace ossmSettings {
     bool isFieldSelected();
     bool hasPending();
 
+    // True once the machine answered that it has no settings to change (its
+    // firmware predates them): the list would only offer "Update OSSM".
+    bool isUnsupported();
+
     // ossm_setting_edit: one number on the right encoder.
     void enterEdit();
     bool editLeavesPending();

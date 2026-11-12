@@ -154,6 +154,11 @@ struct ossm_remote_state {
 
             // OSSM machine settings (from the control screen's Menu button)
             "ossm_settings"_s + on_entry<_> / enterOssmSettings,
+#ifdef FLEET_SERVER
+            // A machine whose firmware has no settings to change: the list
+            // would only say "Update OSSM", so go straight to the main menu.
+            "ossm_settings"_s + event<done>[ossmSettingsUnsupported] = "main_menu"_s,
+#endif
             "ossm_settings"_s + event<done> / drawOssmSettings,
             "ossm_settings"_s + event<right_button_pressed>[isOption<>(MenuItemE::OSSM_SETTINGS_MAIN_MENU) && hasPendingOssmSettings] = "ossm_settings_confirm"_s,
             "ossm_settings"_s + event<right_button_pressed>[isOption<>(MenuItemE::OSSM_SETTINGS_MAIN_MENU)] = "main_menu"_s,

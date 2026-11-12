@@ -517,6 +517,8 @@ namespace ossmSettings {
 
     bool hasPending() { return pendingValid && differsFromStored(pending); }
 
+    bool isUnsupported() { return loadStatus.load() == LoadStatus::Unsupported; }
+
     void enterEdit() {
         listSelection = rightEncoder.readEncoder();
         editingField = constrain(listMenu[listSelection].metaIndex, 0,
