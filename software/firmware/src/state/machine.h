@@ -71,7 +71,12 @@ struct ossm_remote_state {
             "dashboard"_s + event<right_button_pressed> = "settings_menu"_s,
 
 #endif
+#ifdef FLEET_SERVER
+            // Restart and check at start-up (see fleetRequestStartupCheck).
+            "update"_s + on_entry<_> / (drawPage(updatePage), fleetCheckAtStartup),
+#else
             "update"_s + on_entry<_> / (drawPage(updatePage), startTask(updateTask, updateTaskName, &updateTaskHandle)),
+#endif
             // Self-update. BLE is torn down inside updateTask, so every outcome
             // ends in a restart (button, or 10 s timer on the result pages).
             "update"_s + event<done> [updateFailed<>] = "update.failed"_s,

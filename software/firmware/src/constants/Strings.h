@@ -52,7 +52,7 @@ static const char WIFI_CONNECTED_DESCRIPTION[] PROGMEM =
 static const char UPDATING_TITLE[] PROGMEM = "Updating";
 #ifdef FLEET_SERVER
 static const char UPDATING_DESCRIPTION[] PROGMEM =
-    "Checking " FLEET_HOST "\nfor new firmware...";
+    "Restarting to check\n" FLEET_HOST "\nfor new firmware...";
 #else
 static const char UPDATING_DESCRIPTION[] PROGMEM = "Checking for updates...";
 #endif

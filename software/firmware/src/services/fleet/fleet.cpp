@@ -10,6 +10,8 @@
 #include <esp_heap_caps.h>
 #include <esp_http_client.h>
 #include <esp_log.h>
+#include <esp_rom_sys.h>
+#include <esp_rom_uart.h>
 #include <esp_system.h>
 #include <esp_timer.h>
 
@@ -51,6 +53,7 @@ constexpr uint32_t CRASHES_FOR_SAFE_MODE = 3;
 // session, and the outcome of a command that restarted the remote.
 // ---------------------------------------------------------------------------
 constexpr uint32_t RTC_MAGIC = 0xF1EE7AD2;
+constexpr uint32_t CHECK_AT_START = 0xC4EC4A7D;
 constexpr size_t LOG_RING_BYTES = 3072;
 
 RTC_NOINIT_ATTR uint32_t rtcMagic;
@@ -58,6 +61,7 @@ RTC_NOINIT_ATTR uint32_t crashStreak;
 RTC_NOINIT_ATTR uint32_t logHead;    // next byte to write
 RTC_NOINIT_ATTR uint32_t logLength;  // bytes in the ring
 RTC_NOINIT_ATTR char logRing[LOG_RING_BYTES];
+RTC_NOINIT_ATTR uint32_t checkAtStartMagic;  // set by the menu's update entry
 RTC_NOINIT_ATTR int32_t pendingResultId;  // 0 = none
 RTC_NOINIT_ATTR uint32_t pendingResultOk;
 RTC_NOINIT_ATTR char pendingResultDetail[80];
@@ -101,6 +105,7 @@ void evaluateLastReset() {
         logHead = 0;
         logLength = 0;
         pendingResultId = 0;
+        checkAtStartMagic = 0;
     }
     pendingResultDetail[sizeof(pendingResultDetail) - 1] = '\0';
     crashStreak = crashed ? crashStreak + 1 : 0;
@@ -124,7 +129,6 @@ void ringWrite(const char *data, size_t length) {
     portEXIT_CRITICAL_SAFE(&logMux);
 }
 
-// Skips a leading terminal colour code, which IDF adds when colours are on.
 const char *skipColor(const char *line) {
     if (line[0] == '\033' && line[1] == '[') {
         const char *end = strchr(line, 'm');
@@ -139,6 +143,24 @@ bool isWarningOrError(const char *line) {
            strstr(text, "][E]") != nullptr || strstr(text, "][W]") != nullptr;
 }
 
+// Application code (and the Arduino core) prints through the ROM's ets_printf,
+// one character at a time, not through the log system's vprintf. This keeps
+// whole lines and passes them on to the ring and to the serial port.
+char romLine[200];
+size_t romLineLength = 0;
+
+void IRAM_ATTR romPutc(char character) {
+    esp_rom_output_tx_one_char(static_cast<uint8_t>(character));
+    if (character == '\r') return;
+    if (romLineLength < sizeof(romLine) - 1) romLine[romLineLength++] = character;
+    if (character == '\n' || romLineLength >= sizeof(romLine) - 1) {
+        romLine[romLineLength] = '\0';
+        if (isWarningOrError(romLine)) ringWrite(romLine, romLineLength);
+        romLineLength = 0;
+    }
+}
+
+// Skips a leading terminal colour code, which IDF adds when colours are on.
 int captureVprintf(const char *format, va_list arguments) {
     char line[200];
     va_list copy;
@@ -531,8 +553,19 @@ bool fleetSerialCommand(const char *line) {
     return true;
 }
 
+void fleetRequestStartupCheck() {
+    checkAtStartMagic = CHECK_AT_START;
+    // Let the screen show the message before the restart.
+    xTaskCreate(
+        [](void *) {
+            vTaskDelay(pdMS_TO_TICKS(1500));
+            ESP.restart();
+        },
+        "fleetRestart", 2048, nullptr, 1, nullptr);
+}
+
 String fleetDashboardDescription() {
-    String name, channel, latest, last;
+    String name, channel, latest, last, check;
     bool available = false;
     Preferences state;
     if (state.begin("fleet", false)) {  // read-write: creates the namespace
@@ -540,6 +573,7 @@ String fleetDashboardDescription() {
         channel = state.getString("dchan", "");
         latest = state.getString("dlatest", "");
         last = state.getString("dlast", "");
+        check = state.getString("dcheck", "");
         available = state.getBool("davail", false);
         state.end();
     }
@@ -552,6 +586,7 @@ String fleetDashboardDescription() {
     text += name.isEmpty() ? String("Not named yet") : "Name: " + name;
     text += "\nUpdates: " + (channel.isEmpty() ? String("manual") : channel);
     text += "\nLast check-in: " + last;
+    if (!check.isEmpty()) text += "\nUpdate check: " + check;
     if (available && !latest.isEmpty()) {
         text += "\nNew firmware " + latest + " is waiting.\nChoose Check for updates.";
     } else if (last == "OK") {
@@ -563,6 +598,7 @@ String fleetDashboardDescription() {
 void fleetEarlyInit() {
     evaluateLastReset();
     previousVprintf = esp_log_set_vprintf(captureVprintf);
+    esp_rom_install_channel_putc(1, romPutc);
 }
 
 void fleetBootCheckin() {
@@ -645,11 +681,35 @@ void fleetBootCheckin() {
             runCommand(command);
         }
     }
+
+    // The menu asked for a check: look for new firmware now and install it.
+    // Does not return when something installs (the remote restarts on it).
+    const bool checkRequested = checkAtStartMagic == CHECK_AT_START;
+    checkAtStartMagic = 0;
+    if (state.begin("fleet", false)) {
+        // After an install the new firmware says so; otherwise keep the last result.
+        if (!checkRequested && state.getString("dcheck", "") == "Installing") {
+            state.putString("dcheck", String("Updated to ") + VERSION);
+        }
+        if (checkRequested) state.putString("dcheck", "Installing");  // replaced below
+        state.end();
+    }
+    if (checkRequested) {
+        String detail;
+        fleetInstallUpdate(detail);  // restarts on success
+        if (state.begin("fleet", false)) {
+            state.putString("dcheck", detail == "server offered no update for this remote"
+                                          ? String("Up to date")
+                                          : "Failed: " + detail);
+            state.end();
+        }
+    }
 }
 
 #else
 
 String fleetDashboardDescription() { return ""; }
+void fleetRequestStartupCheck() {}
 void fleetEarlyInit() {}
 void fleetBootCheckin() {}
 bool fleetSerialCommand(const char *) { return false; }

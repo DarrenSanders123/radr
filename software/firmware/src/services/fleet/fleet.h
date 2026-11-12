@@ -37,6 +37,12 @@ void fleetBootCheckin();
 // whether newer firmware is waiting. Empty in builds without the fleet client.
 String fleetDashboardDescription();
 
+// The menu's "Check for updates": restarts the remote, which then checks the
+// dashboard and installs any new firmware at start-up, where there is memory
+// for it. (The stock in-menu update runs after Bluetooth is shut down and
+// runs out of memory against this server's certificate chain.)
+void fleetRequestStartupCheck();
+
 // Called by the serial identity reader for every line it cannot interpret.
 // Returns true when the line was meant for the fleet client.
 bool fleetSerialCommand(const char *line);

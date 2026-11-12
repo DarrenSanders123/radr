@@ -288,6 +288,9 @@ namespace actions {
         xTimerStart(ossmUpdateTimer, 0);
     };
 
+    // Fleet builds: "Check for updates" restarts the remote and checks at start-up.
+    inline auto fleetCheckAtStartup = []() { fleetRequestStartupCheck(); };
+
     // Fleet builds: what this remote knows about its place on the builder's
     // dashboard. Built when the page opens, so it is always the latest.
     inline auto drawDashboard = []() {
