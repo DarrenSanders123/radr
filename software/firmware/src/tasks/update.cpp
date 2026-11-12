@@ -285,11 +285,13 @@ void updateSoftwareTask(void *pvParameters) {
 }
 
 #ifdef FLEET_SERVER
+namespace {
+
 // Installs the update the fleet server offers, straight away and without the
 // update screens. Used by the fleet check-in at start-up, before Bluetooth is
 // initialised, so there is plenty of memory for TLS. Does not return when the
 // update installs: the remote restarts on the new firmware.
-bool fleetInstallUpdate(String &detail) {
+bool fleetInstallUpdateImpl(String &detail) {
     if (WiFi.status() != WL_CONNECTED) {
         detail = "Wi-Fi is not connected";
         return false;
@@ -311,20 +313,47 @@ bool fleetInstallUpdate(String &detail) {
         detail = "invalid install plan: " + error;
         return false;
     }
-    // The device registry goes first, then the application.
+
+    firmware::installProgressHook = [](std::uint32_t done, std::uint32_t total) {
+        static std::uint32_t lastFifth = 99;
+        const std::uint32_t fifth = total == 0 ? 0 : (done * 5ULL) / total;
+        if (done == 0 || fifth != lastFifth) {
+            lastFifth = fifth;
+            ESP_LOGW(UPDATE_TAG, "Download %u%%: %u of %u bytes",
+                     static_cast<unsigned>(fifth * 20),
+                     static_cast<unsigned>(done), static_cast<unsigned>(total));
+        }
+    };
+
+    // The device registry goes first, then the application. The registry
+    // partition stays unmounted until the end: mounting it in between would
+    // take memory the next download needs.
+    bool registryInstalled = false;
     for (std::size_t index = 0; index < decision.artifactCount; ++index) {
         const firmware::Artifact &artifact = decision.artifacts[index];
+        if (artifact.role != "filesystem" && artifact.role != "application") {
+            continue;
+        }
+        ESP_LOGW(UPDATE_TAG, "Installing %s: %u bytes (free=%u largest=%u)",
+                 artifact.role.c_str(), static_cast<unsigned>(artifact.sizeBytes),
+                 static_cast<unsigned>(heap_caps_get_free_size(
+                     MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)),
+                 static_cast<unsigned>(heap_caps_get_largest_free_block(
+                     MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
         if (artifact.role == "filesystem") {
             LittleFS.end();
             const bool installed =
                 firmware::installStreamedArtifact(artifact, U_SPIFFS, error);
-            LittleFS.begin();
             if (!installed) {
+                LittleFS.begin();
                 detail = "registry install failed: " + error;
                 return false;
             }
-        } else if (artifact.role == "application") {
+            registryInstalled = true;
+            vTaskDelay(pdMS_TO_TICKS(500));  // let the connection's memory settle
+        } else {
             if (!firmware::installStreamedArtifact(artifact, U_FLASH, error)) {
+                if (registryInstalled) LittleFS.begin();
                 detail = "install-failed: " + error;
                 return false;
             }
@@ -332,7 +361,41 @@ bool fleetInstallUpdate(String &detail) {
             esp_restart();
         }
     }
+    if (registryInstalled) LittleFS.begin();
     detail = "release has no application artifact";
     return false;
+}
+
+struct FleetInstallJob {
+    String *detail = nullptr;
+    bool ok = false;
+    volatile bool done = false;
+};
+
+void fleetInstallTask(void *argument) {
+    auto *job = static_cast<FleetInstallJob *>(argument);
+    job->ok = fleetInstallUpdateImpl(*job->detail);
+    job->done = true;
+    vTaskDelete(nullptr);
+}
+
+}  // namespace
+
+// The install runs in a task of its own: the TLS handshake and the download
+// buffers need far more stack than the Arduino main task has, and running them
+// there crashed the remote.
+bool fleetInstallUpdate(String &detail) {
+    static FleetInstallJob job;
+    job.detail = &detail;
+    job.ok = false;
+    job.done = false;
+    // Idle priority so a long TLS handshake cannot starve the idle task.
+    if (xTaskCreatePinnedToCore(fleetInstallTask, "fleetInstall", 16384, &job,
+                                tskIDLE_PRIORITY, nullptr, 0) != pdPASS) {
+        detail = "could not start the install task (not enough memory)";
+        return false;
+    }
+    while (!job.done) vTaskDelay(pdMS_TO_TICKS(200));
+    return job.ok;
 }
 #endif
