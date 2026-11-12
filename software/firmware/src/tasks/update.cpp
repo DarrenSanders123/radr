@@ -28,6 +28,13 @@
 #define RADR_OTA_MIN_LARGEST_BLOCK (28 * 1024)
 #endif
 
+// Fleet builds take their updates from the builder's own server.
+#ifdef FLEET_SERVER
+#define RADR_UPDATE_SERVER FLEET_SERVER
+#else
+#define RADR_UPDATE_SERVER RAD_SERVER
+#endif
+
 namespace {
 
 constexpr const char *UPDATE_TAG = "UPDATE";
@@ -172,7 +179,7 @@ bool isUpdateAvailable() {
     firmware::Decision decision;
     String error;
     const auto report = makeDeviceReport();
-    if (!firmware::postCheck(RAD_SERVER, report, decision, error)) {
+    if (!firmware::postCheck(RADR_UPDATE_SERVER, report, decision, error)) {
         ESP_LOGE(UPDATE_TAG, "Firmware resolver failed: %s", error.c_str());
         updateFailureReason = "Could not reach the update server.";
         return false;
@@ -274,3 +281,56 @@ void updateSoftwareTask(void *pvParameters) {
     ESP_LOGI(UPDATE_TAG, "Verified application installed; restarting");
     esp_restart();
 }
+
+#ifdef FLEET_SERVER
+// Installs the update the fleet server offers, straight away and without the
+// update screens. Used by the fleet check-in at start-up, before Bluetooth is
+// initialised, so there is plenty of memory for TLS. Does not return when the
+// update installs: the remote restarts on the new firmware.
+bool fleetInstallUpdate(String &detail) {
+    if (WiFi.status() != WL_CONNECTED) {
+        detail = "Wi-Fi is not connected";
+        return false;
+    }
+    firmware::Decision decision;
+    String error;
+    const auto report = makeDeviceReport();
+    if (!firmware::postCheck(RADR_UPDATE_SERVER, report, decision, error)) {
+        detail = "check-failed: " + error;
+        return false;
+    }
+    firmware::provenance::observeCurrent(report, decision);
+    firmware::provenance::stageUpdate(report, decision);
+    if (!decision.shouldUpdate) {
+        detail = "server offered no update for this remote";
+        return false;
+    }
+    if (!validateInstallPlan(decision, error)) {
+        detail = "invalid install plan: " + error;
+        return false;
+    }
+    // The device registry goes first, then the application.
+    for (std::size_t index = 0; index < decision.artifactCount; ++index) {
+        const firmware::Artifact &artifact = decision.artifacts[index];
+        if (artifact.role == "filesystem") {
+            LittleFS.end();
+            const bool installed =
+                firmware::installStreamedArtifact(artifact, U_SPIFFS, error);
+            LittleFS.begin();
+            if (!installed) {
+                detail = "registry install failed: " + error;
+                return false;
+            }
+        } else if (artifact.role == "application") {
+            if (!firmware::installStreamedArtifact(artifact, U_FLASH, error)) {
+                detail = "install-failed: " + error;
+                return false;
+            }
+            ESP_LOGW(UPDATE_TAG, "Verified application installed; restarting");
+            esp_restart();
+        }
+    }
+    detail = "release has no application artifact";
+    return false;
+}
+#endif

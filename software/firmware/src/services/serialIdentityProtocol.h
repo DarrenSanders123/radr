@@ -8,7 +8,12 @@ namespace serialIdentity {
 // A single bounded parser owns the input stream in every build. Invalid binary
 // and oversized lines are discarded in full, never interpreted as a suffix.
 class CommandBuffer {
+#ifdef FLEET_SERVER
+    // The setup page sends longer lines (Wi-Fi details), as plain ASCII.
+    char line[512]{};
+#else
     char line[32]{};
+#endif
     size_t used = 0;
     bool invalid = false;
 public:

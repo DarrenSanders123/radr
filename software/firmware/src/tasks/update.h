@@ -15,6 +15,12 @@ extern String updateFailureReason;
 bool isUpdateAvailable();
 bool confirmRunningFirmware();
 
+#ifdef FLEET_SERVER
+// Fleet builds only: install the update the fleet server offers right now.
+// Returns false (with the reason in `detail`) if it did not install.
+bool fleetInstallUpdate(String &detail);
+#endif
+
 // FREERTOS Task
 
 extern TaskHandle_t updateTaskHandle;

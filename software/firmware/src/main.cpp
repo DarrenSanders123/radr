@@ -17,6 +17,7 @@
 #include "services/coms.h"
 #include "services/display.h"
 #include "services/encoder.h"
+#include "services/fleet/fleet.h"
 #include "services/imu.h"
 #include "services/lastInteraction.h"
 #include "services/leds.h"
@@ -71,6 +72,7 @@ static void logBootMemoryBudget() {
 void setup() {
     configureSerialIdentityUsb();
     Serial.begin(115200);
+    fleetEarlyInit();  // no-op unless built as the fleet environment
     startSerialIdentity();
 
 #ifdef DEBUG
@@ -128,6 +130,9 @@ void setup() {
     initVibrator();
     initIMUService();
     updateIMUReadings();
+    // Fleet builds check in with the builder's server here, before Bluetooth
+    // starts, while there is memory for TLS. No-op in other builds.
+    fleetBootCheckin();
     initBLE();
     logBootMemoryBudget();
     initStateMachine();

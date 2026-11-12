@@ -13,3 +13,6 @@ captures/
 
 # macOS Finder metadata
 .DS_Store
+
+# Local fleet build settings (server address and key)
+software/firmware/fleet.env

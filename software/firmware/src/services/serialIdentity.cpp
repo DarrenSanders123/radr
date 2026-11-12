@@ -4,6 +4,9 @@
 #include <atomic>
 #include "constants/Version.h"
 #include "serialIdentityProtocol.h"
+#ifdef FLEET_SERVER
+#include "services/fleet/fleet.h"
+#endif
 #include <serialIdentityBuild.h>
 #if ARDUINO_USB_CDC_ON_BOOT && !ARDUINO_USB_MODE
 #include <USB.h>
@@ -53,6 +56,10 @@ void console(void*) {
                     lastAnnouncement = millis();
                 }
             }
+#ifdef FLEET_SERVER
+            else if (fleetSerialCommand(command)) {
+            }
+#endif
 #ifdef VERSIONDEV
             else if (const auto handler = developmentCommand.load()) handler(command);
 #endif
@@ -83,7 +90,11 @@ void startSerialIdentity() {
 #ifdef VERSIONDEV
     constexpr uint32_t stackBytes = 6144; // Includes development screen encoding.
 #else
+#ifdef FLEET_SERVER
+    constexpr uint32_t stackBytes = 5120; // Longer command buffer for the setup page.
+#else
     constexpr uint32_t stackBytes = 3072;
+#endif
 #endif
     if (xTaskCreate(console, "serialIdentity", stackBytes, nullptr, 1, &identityTask) != pdPASS)
         Serial.println("RAD_ID_ERROR console_task");
