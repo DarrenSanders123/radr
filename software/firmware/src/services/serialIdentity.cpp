@@ -44,7 +44,13 @@ void console(void*) {
     vTaskDelay(pdMS_TO_TICKS(1000));
     announce();
     uint32_t lastAnnouncement = millis();
+#ifdef FLEET_SERVER
+    // 512 bytes for the setup page's longer lines: static, so the task stack
+    // (internal RAM the remote's update needs) stays as small as before.
+    static serialIdentity::CommandBuffer parser;
+#else
     serialIdentity::CommandBuffer parser;
+#endif
     for (;;) {
         // Bound serial flood work so application tasks still get scheduled.
         for (int count = 0; count < 128 && Serial.available(); ++count) {
@@ -90,11 +96,7 @@ void startSerialIdentity() {
 #ifdef VERSIONDEV
     constexpr uint32_t stackBytes = 6144; // Includes development screen encoding.
 #else
-#ifdef FLEET_SERVER
-    constexpr uint32_t stackBytes = 5120; // Longer command buffer for the setup page.
-#else
     constexpr uint32_t stackBytes = 3072;
-#endif
 #endif
     if (xTaskCreate(console, "serialIdentity", stackBytes, nullptr, 1, &identityTask) != pdPASS)
         Serial.println("RAD_ID_ERROR console_task");

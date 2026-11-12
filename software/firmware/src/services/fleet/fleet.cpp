@@ -63,6 +63,10 @@ RTC_NOINIT_ATTR uint32_t pendingResultOk;
 RTC_NOINIT_ATTR char pendingResultDetail[80];
 
 portMUX_TYPE logMux = portMUX_INITIALIZER_UNLOCKED;
+volatile uint32_t hookCalls = 0;      // lines the log system handed to the hook
+volatile uint32_t hookKept = 0;       // of those, how many were warnings/errors
+char hookSample[48] = {};             // the first line seen, to show its format
+uint32_t ringBytesAtStart = 0;        // what the last session left in the ring
 vprintf_like_t previousVprintf = nullptr;
 
 esp_reset_reason_t resetReason = ESP_RST_UNKNOWN;
@@ -84,6 +88,7 @@ const char *resetReasonName(esp_reset_reason_t reason) {
 }
 
 void evaluateLastReset() {
+    ringBytesAtStart = logLength;  // before anything is checked or cleared
     resetReason = esp_reset_reason();
     const bool crashed =
         resetReason == ESP_RST_PANIC || resetReason == ESP_RST_INT_WDT ||
@@ -140,7 +145,12 @@ int captureVprintf(const char *format, va_list arguments) {
     va_copy(copy, arguments);
     const int written = vsnprintf(line, sizeof(line), format, copy);
     va_end(copy);
+    hookCalls = hookCalls + 1;
+    if (hookSample[0] == '\0' && written > 0) {
+        strncpy(hookSample, line, sizeof(hookSample) - 1);
+    }
     if (written > 0 && isWarningOrError(line)) {
+        hookKept = hookKept + 1;
         ringWrite(line, min(static_cast<size_t>(written), sizeof(line) - 1));
     }
     return previousVprintf != nullptr ? previousVprintf(format, arguments)
@@ -292,6 +302,10 @@ void buildReport(JsonDocument &report, const String &logs) {
     report["uptimeSeconds"] =
         static_cast<uint32_t>(esp_timer_get_time() / 1000000LL);
     report["resetReason"] = resetReasonName(resetReason);
+    report["logRingBytes"] = ringBytesAtStart;
+    report["logHookCalls"] = hookCalls;
+    report["logHookKept"] = hookKept;
+    report["logSample"] = hookSample;
     report["crashes"] = crashStreak;
     report["safeMode"] = safeMode;
 
@@ -404,8 +418,6 @@ void runCommand(const Command &command) {
 // ---------------------------------------------------------------------------
 namespace {
 
-QueueHandle_t serialInbox = nullptr;
-
 String fromHex(const char *hex) {
     String text;
     const size_t length = strlen(hex);
@@ -490,25 +502,31 @@ void handleSerial(const String &json) {
     }
 }
 
-void serialTask(void *) {
-    char *line = nullptr;
-    for (;;) {
-        if (xQueueReceive(serialInbox, &line, portMAX_DELAY) == pdTRUE &&
-            line != nullptr) {
-            handleSerial(String(line));
-            free(line);
-        }
-    }
+// One command at a time, each in a short-lived task. A task that stayed
+// resident would keep its stack for good, and the remote's update needs a
+// large free block of memory once Bluetooth is shut down (see update.cpp).
+volatile bool serialBusy = false;
+
+void serialWorker(void *argument) {
+    char *line = static_cast<char *>(argument);
+    handleSerial(String(line));
+    free(line);
+    serialBusy = false;
+    vTaskDelete(nullptr);
 }
 
 }  // namespace
 
 bool fleetSerialCommand(const char *line) {
     if (strncmp(line, "FLEET?", 6) != 0) return false;
-    if (serialInbox == nullptr) return true;
+    if (serialBusy) return true;  // the page asks again if it got no reply
     char *copy = strdup(line + 6);
-    if (copy != nullptr && xQueueSend(serialInbox, &copy, 0) != pdTRUE) {
+    if (copy == nullptr) return true;
+    serialBusy = true;
+    if (createInternalTask(serialWorker, "fleetSerial", 6144, copy, 1, nullptr,
+                           0) != pdPASS) {
         free(copy);
+        serialBusy = false;
     }
     return true;
 }
@@ -545,11 +563,6 @@ String fleetDashboardDescription() {
 void fleetEarlyInit() {
     evaluateLastReset();
     previousVprintf = esp_log_set_vprintf(captureVprintf);
-    serialInbox = xQueueCreate(4, sizeof(char *));
-    if (serialInbox != nullptr) {
-        createInternalTask(serialTask, "fleetSerial", 8192, nullptr, 1, nullptr,
-                           0);
-    }
 }
 
 void fleetBootCheckin() {
@@ -592,6 +605,9 @@ void fleetBootCheckin() {
                 delay(100);
             }
         }
+        // The finished task's 16 KB stack is freed by the idle task; let it
+        // happen before Bluetooth starts allocating around it.
+        delay(300);
         success = checkinDone && checkinResult.ok;
         ESP_LOGW(TAG, "Check-in %s (%u command(s))",
                  success ? "ok" : ("failed: " + checkinResult.error).c_str(),
@@ -617,6 +633,12 @@ void fleetBootCheckin() {
         }
         state.end();
     }
+
+    ESP_LOGW(TAG, "Before Bluetooth: internal free=%u largest=%u",
+             static_cast<unsigned>(
+                 heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)),
+             static_cast<unsigned>(heap_caps_get_largest_free_block(
+                 MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
 
     if (success) {
         for (const Command &command : checkinResult.commands) {
