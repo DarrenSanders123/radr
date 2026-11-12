@@ -271,6 +271,11 @@ struct CheckinResult {
     bool ok = false;
     String error;
     std::vector<Command> commands;
+    // What the dashboard says about this remote (shown on its Dashboard page).
+    String name;
+    String channel;
+    String latestVersion;
+    bool updateAvailable = false;
 };
 
 CheckinResult checkinResult;
@@ -342,6 +347,11 @@ void checkinTask(void *) {
             checkinResult.error = "reply was not valid JSON";
         } else {
             checkinResult.ok = true;
+            JsonObjectConst dashboard = reply["dashboard"].as<JsonObjectConst>();
+            checkinResult.name = dashboard["name"] | "";
+            checkinResult.channel = dashboard["channel"] | "";
+            checkinResult.latestVersion = dashboard["latestVersion"] | "";
+            checkinResult.updateAvailable = dashboard["updateAvailable"] | false;
             for (JsonObjectConst item : reply["commands"].as<JsonArrayConst>()) {
                 Command command;
                 command.id = item["id"] | 0;
@@ -503,6 +513,35 @@ bool fleetSerialCommand(const char *line) {
     return true;
 }
 
+String fleetDashboardDescription() {
+    String name, channel, latest, last;
+    bool available = false;
+    Preferences state;
+    if (state.begin("fleet", false)) {  // read-write: creates the namespace
+        name = state.getString("dname", "");
+        channel = state.getString("dchan", "");
+        latest = state.getString("dlatest", "");
+        last = state.getString("dlast", "");
+        available = state.getBool("davail", false);
+        state.end();
+    }
+
+    String text = String(FLEET_HOST) + "\n";
+    if (last.isEmpty()) {
+        text += "Not checked in yet.\nSet up WiFi first.";
+        return text;
+    }
+    text += name.isEmpty() ? String("Not named yet") : "Name: " + name;
+    text += "\nUpdates: " + (channel.isEmpty() ? String("manual") : channel);
+    text += "\nLast check-in: " + last;
+    if (available && !latest.isEmpty()) {
+        text += "\nNew firmware " + latest + " is waiting.\nChoose Check for updates.";
+    } else if (last == "OK") {
+        text += "\nFirmware is up to date.";
+    }
+    return text;
+}
+
 void fleetEarlyInit() {
     evaluateLastReset();
     previousVprintf = esp_log_set_vprintf(captureVprintf);
@@ -563,6 +602,19 @@ void fleetBootCheckin() {
 
     if (state.begin("fleet", false)) {
         state.putUInt("fails", success ? 0 : failures + 1);
+        // What the Dashboard page shows. Kept from the last start, so it also
+        // answers when this start could not check in.
+        if (success) {
+            state.putString("dname", checkinResult.name);
+            state.putString("dchan", checkinResult.channel);
+            state.putString("dlatest", checkinResult.latestVersion);
+            state.putBool("davail", checkinResult.updateAvailable);
+            state.putString("dlast", "OK");
+        } else if (WiFi.status() == WL_CONNECTED) {
+            state.putString("dlast", "Failed: " + checkinResult.error);
+        } else if (!WiFi.SSID().isEmpty()) {
+            state.putString("dlast", "No Wi-Fi at start");
+        }
         state.end();
     }
 
@@ -575,6 +627,7 @@ void fleetBootCheckin() {
 
 #else
 
+String fleetDashboardDescription() { return ""; }
 void fleetEarlyInit() {}
 void fleetBootCheckin() {}
 bool fleetSerialCommand(const char *) { return false; }

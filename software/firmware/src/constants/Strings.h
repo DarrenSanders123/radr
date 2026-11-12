@@ -30,7 +30,11 @@ static const char SLEEP_NAME[] PROGMEM = "Sleep";
 static const char GO_BACK_NAME[] PROGMEM = "Go Back";
 static const char WIFI_SETTINGS_NAME[] PROGMEM = "WiFi Settings";
 static const char PAIRING_NAME[] PROGMEM = "Pairing";
+#ifdef FLEET_SERVER
+static const char UPDATE_NAME[] PROGMEM = "Check for updates";
+#else
 static const char UPDATE_NAME[] PROGMEM = "Update Device";
+#endif
 static const char RESTART_NAME[] PROGMEM = "Restart Device";
 static const char DEEP_SLEEP_NAME[] PROGMEM = "Sleep";
 
@@ -46,6 +50,11 @@ static const char WIFI_CONNECTED_DESCRIPTION[] PROGMEM =
     "Your OSSM Remote is now connected to WiFi.";
 
 static const char UPDATING_TITLE[] PROGMEM = "Updating";
+#ifdef FLEET_SERVER
+static const char UPDATING_DESCRIPTION[] PROGMEM =
+    "Checking " FLEET_HOST "\nfor new firmware...";
+#else
 static const char UPDATING_DESCRIPTION[] PROGMEM = "Checking for updates...";
+#endif
 
 #endif

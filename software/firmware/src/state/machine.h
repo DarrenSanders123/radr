@@ -55,12 +55,22 @@ struct ossm_remote_state {
             "settings_menu"_s + event<left_button_pressed> = "main_menu"_s,
             "settings_menu"_s + event<right_button_pressed>[isOption<>(MenuItemE::BACK)] = "main_menu"_s,
             "settings_menu"_s + event<right_button_pressed>[isOption<>(MenuItemE::WIFI_SETTINGS)] = "wmConfig"_s,
+#ifdef FLEET_SERVER
+            "settings_menu"_s + event<right_button_pressed>[isOption<>(MenuItemE::DASHBOARD)] = "dashboard"_s,
+#endif
             "settings_menu"_s + event<right_button_pressed>[isOption<>(MenuItemE::UPDATE) && isOnline<>] = "update"_s,
             "settings_menu"_s + event<right_button_pressed>[isOption<>(MenuItemE::UPDATE)] = "update.wifi"_s,
             "settings_menu"_s + event<right_button_pressed>[isOption<>(MenuItemE::RESTART)] = "restart"_s,
 
 
 
+#ifdef FLEET_SERVER
+            // The remote's status on the builder's dashboard (fleet builds only).
+            "dashboard"_s + on_entry<_> / drawDashboard,
+            "dashboard"_s + event<left_button_pressed> = "settings_menu"_s,
+            "dashboard"_s + event<right_button_pressed> = "settings_menu"_s,
+
+#endif
             "update"_s + on_entry<_> / (drawPage(updatePage), startTask(updateTask, updateTaskName, &updateTaskHandle)),
             // Self-update. BLE is torn down inside updateTask, so every outcome
             // ends in a restart (button, or 10 s timer on the result pages).

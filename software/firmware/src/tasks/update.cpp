@@ -31,8 +31,10 @@
 // Fleet builds take their updates from the builder's own server.
 #ifdef FLEET_SERVER
 #define RADR_UPDATE_SERVER FLEET_SERVER
+#define RADR_UNREACHABLE_TEXT "Could not reach your dashboard."
 #else
 #define RADR_UPDATE_SERVER RAD_SERVER
+#define RADR_UNREACHABLE_TEXT "Could not reach the update server."
 #endif
 
 namespace {
@@ -181,7 +183,7 @@ bool isUpdateAvailable() {
     const auto report = makeDeviceReport();
     if (!firmware::postCheck(RADR_UPDATE_SERVER, report, decision, error)) {
         ESP_LOGE(UPDATE_TAG, "Firmware resolver failed: %s", error.c_str());
-        updateFailureReason = "Could not reach the update server.";
+        updateFailureReason = RADR_UNREACHABLE_TEXT;
         return false;
     }
     firmware::provenance::observeCurrent(report, decision);

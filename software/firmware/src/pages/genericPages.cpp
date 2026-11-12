@@ -17,7 +17,12 @@
 // duplication across translation units)
 const TextPage updateUpToDatePage = {
     .title = "Up to Date",
+#ifdef FLEET_SERVER
+    .description = "You have the latest firmware from your dashboard. "
+                   "Restarting...",
+#else
     .description = "This remote is running the latest firmware. Restarting...",
+#endif
     .leftButtonText = "Restart",
     .rightButtonText = "Restart",
 };

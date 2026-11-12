@@ -30,6 +30,7 @@
 #include "pages/ossmSettings.h"
 #include "pages/ossmUpdate.h"
 #include "pages/pairing.h"
+#include "services/fleet/fleet.h"
 #include "tasks/update.h"
 #include "utils/psramTask.h"
 #include "services/leftEncoderMonitor.h"
@@ -285,6 +286,19 @@ namespace actions {
                                            fireStateMachineDoneEvent();
                                        });
         xTimerStart(ossmUpdateTimer, 0);
+    };
+
+    // Fleet builds: what this remote knows about its place on the builder's
+    // dashboard. Built when the page opens, so it is always the latest.
+    inline auto drawDashboard = []() {
+        static TextPage page;
+        page.title = "Dashboard";
+        page.description = fleetDashboardDescription();
+        page.leftButtonText = GO_BACK;
+        page.rightButtonText = GO_BACK;
+        clearPage();
+        createPsramTask(drawPageTask, "drawPageTask", 5 * configMINIMAL_STACK_SIZE,
+                        &page, 5, NULL, 1);
     };
 
     // --- Self-update outcome pages. BLE is down by now, so every exit is a

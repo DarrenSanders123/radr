@@ -31,7 +31,8 @@ enum MenuItemE {
     OSSM_RESTART,
     OSSM_SETTINGS_MAIN_MENU,
     OSSM_SETTING_FIELD,
-    OSSM_SETTINGS_INFO
+    OSSM_SETTINGS_INFO,
+    DASHBOARD  // fleet builds: status of this remote on the builder's dashboard
 };
 
 struct MenuItem {
@@ -63,6 +64,9 @@ inline const int numMainMenu = mainMenu.size();
 inline std::vector<MenuItem> settingsMenu = {
     {MenuItemE::BACK, GO_BACK_NAME, bitmap_back},
     {MenuItemE::WIFI_SETTINGS, WIFI_SETTINGS_NAME, bitmap_wifi},
+#ifdef FLEET_SERVER
+    {MenuItemE::DASHBOARD, "Dashboard", bitmap_link},
+#endif
     // {MenuItemE::PAIRING, PAIRING_NAME, bitmap_link},
     {MenuItemE::UPDATE, UPDATE_NAME, bitmap_update},
     {MenuItemE::RESTART, RESTART_NAME, bitmap_restart},
@@ -77,7 +81,11 @@ inline std::vector<MenuItem> ossmMenu = {
     {MenuItemE::OSSM_SIMPLE_PENETRATION, "Simple Penetration",
      researchAndDesireWaves},
     {MenuItemE::OSSM_STREAMING, "Streaming", researchAndDesireTerminal},
+#ifndef FLEET_SERVER
+    // Pairing registers the OSSM with the Research and Desire dashboard. A
+    // fleet machine is registered with the builder's dashboard instead.
     {MenuItemE::OSSM_PAIRING, "Pairing", bitmap_link},
+#endif
     {MenuItemE::OSSM_UPDATE, "Update OSSM", bitmap_update},
     {MenuItemE::OSSM_HELP, "Help", researchAndDesireHeart},
     {MenuItemE::OSSM_RESTART, "Restart OSSM", bitmap_restart},

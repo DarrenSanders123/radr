@@ -1,6 +1,8 @@
 #ifndef RADR_SERVICES_FLEET_H
 #define RADR_SERVICES_FLEET_H
 
+#include <Arduino.h>
+
 /**
  * Fleet client for the wireless remote: lets the builder's own server see the
  * remote's status and logs, restart it and update it, and lets the browser
@@ -29,6 +31,11 @@ void fleetEarlyInit();
 
 // In setup(), after Wi-Fi is started and before initBLE().
 void fleetBootCheckin();
+
+// The text of the remote's "Dashboard" menu page: which dashboard it talks
+// to, its name there, its update channel, how the last check-in went and
+// whether newer firmware is waiting. Empty in builds without the fleet client.
+String fleetDashboardDescription();
 
 // Called by the serial identity reader for every line it cannot interpret.
 // Returns true when the line was meant for the fleet client.

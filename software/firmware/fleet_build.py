@@ -35,5 +35,7 @@ env.Append(
         ("FLEET_SERVER", env.StringifyMacro(server)),
         ("FLEET_KEY", env.StringifyMacro(key)),
         ("FLEET_ARTIFACT_PREFIX", env.StringifyMacro(server + "/firmware/releases/")),
+        # Shown on the remote's own menus, e.g. "Checking ossm.example.com ...".
+        ("FLEET_HOST", env.StringifyMacro(server[len("https://"):])),
     ]
 )
