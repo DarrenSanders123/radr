@@ -280,7 +280,7 @@ namespace actions {
         if (ossmUpdateTimer != nullptr) {
             xTimerDelete(ossmUpdateTimer, 0);
         }
-        ossmUpdateTimer = xTimerCreate("ossmReboot", pdMS_TO_TICKS(5000),
+        ossmUpdateTimer = xTimerCreate("ossmReboot", pdMS_TO_TICKS(60000),  // an update takes about a minute
                                        pdFALSE, nullptr, [](TimerHandle_t) {
                                            ossmUpdateTimer = nullptr;
                                            fireStateMachineDoneEvent();
