@@ -40,8 +40,9 @@ void initStateMachine()
         stateMachine = new sml::sm<ossm_remote_state, sml::thread_safe<ESP32RecursiveMutex>, sml::logger<StateLogger>>(stateLogger);
 
         stateMachine->process_event(done{});
-        createInternalTask(ossmWatchTask, "ossmWatch", 8 * configMINIMAL_STACK_SIZE,
-                           nullptr, 1, nullptr, 1);
+        // The stack lives in PSRAM: internal RAM is what Bluetooth needs.
+        createPsramTask(ossmWatchTask, "ossmWatch", 8 * configMINIMAL_STACK_SIZE,
+                        nullptr, 1, nullptr, 1);
     }
 }
 
