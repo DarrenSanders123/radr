@@ -10,6 +10,12 @@ void startOssmUpdateRequest();
 // update was requested. Empty if it was never read. Never does BLE I/O.
 std::string ossmMacAddress();
 
+// After an OSSM drops the link to update and restart: scan for the same OSSM
+// and connect to it again by itself (connected_event moves the machine on).
+// Gives up after a few minutes with done. Cancelled by stopOssmReconnect.
+void startOssmReconnect();
+void stopOssmReconnect();
+
 // Draws the Install / Cancel page with the version the OSSM was offered.
 void drawOssmUpdateAvailableFromState();
 

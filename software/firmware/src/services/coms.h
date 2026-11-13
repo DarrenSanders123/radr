@@ -27,6 +27,8 @@ void initBLE();
 std::vector<DiscoveredDevice> &getDiscoveredDevices();
 void clearDiscoveredDevices();
 void connectToDiscoveredDevice(int index);
+// Address of the device last connected to (empty before the first connection).
+std::string lastConnectedAddress();
 bool startScanWithTimeout(int timeoutMs, void (*onComplete)());
 
 #endif

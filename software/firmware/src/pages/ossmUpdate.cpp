@@ -8,11 +8,13 @@
 #include "constants/Strings.h"
 #include "devices/researchAndDesire/ossm/ossm_state.h"
 #include "pages/TextPages.h"
+#include "services/coms.h"
 // Defined in remote.cpp; keeps the state-machine headers (and their
 // header-static pages) out of this translation unit.
 void fireStateMachineOssmNoWifiEvent();
 void fireStateMachineOssmUnsupportedEvent();
 void fireStateMachineOssmLinkLostEvent();
+void fireStateMachineDoneEvent();
 void fireStateMachineTaskFailedEvent();
 #include "utils/psramTask.h"
 
@@ -28,6 +30,15 @@ const TextPage ossmUpdateUpdatingPage = {
     .description =
         "Your OSSM is installing an update. Do not turn it off or "
         "restart it. It restarts by itself when it is done.",
+    .leftButtonText = CANCEL_STRING,
+};
+
+const TextPage ossmReconnectPage = {
+    .title = "Updating OSSM",
+    .description =
+        "Waiting for your OSSM to restart. Do not turn it off. "
+        "The remote reconnects by itself.",
+    .leftButtonText = CANCEL_STRING,
 };
 
 const TextPage ossmUpdateNonePage = {
@@ -115,6 +126,56 @@ static void followOssmFlow(const char *prefix) {
         vTaskDelay(pdMS_TO_TICKS(OSSM_POLL_INTERVAL_MS));
     }
 }
+
+static volatile bool reconnectCancelled = false;
+static volatile bool reconnectRunning = false;
+
+static void ossmReconnectTask(void *) {
+    const std::string wanted = lastConnectedAddress();
+    // About 3 minutes: the OSSM restarts, downloads and restarts again.
+    for (int attempt = 0; attempt < 40 && !reconnectCancelled; attempt++) {
+        startScanWithTimeout(3000, nullptr);
+        vTaskDelay(pdMS_TO_TICKS(3300));
+        if (reconnectCancelled) break;
+        auto &found = getDiscoveredDevices();
+        int index = -1;
+        for (size_t i = 0; i < found.size(); i++) {
+            if (wanted.empty() ||
+                found[i].advertisedDevice->getAddress().toString() == wanted) {
+                index = static_cast<int>(i);
+                break;
+            }
+        }
+        if (index < 0) continue;
+        connectToDiscoveredDevice(index);  // connected_event follows on success
+        for (int waited = 0; waited < 150 && !reconnectCancelled; waited++) {
+            vTaskDelay(pdMS_TO_TICKS(100));
+            if (device != nullptr && device->isConnected) break;
+        }
+        // Success: the state machine has left this screen and cancelled us.
+        // Failure: try again from a fresh scan.
+        for (int waited = 0; waited < 20 && !reconnectCancelled; waited++) {
+            vTaskDelay(pdMS_TO_TICKS(100));
+        }
+    }
+    reconnectRunning = false;
+    if (!reconnectCancelled) fireStateMachineDoneEvent();
+    vTaskDelete(nullptr);
+}
+
+void startOssmReconnect() {
+    reconnectCancelled = false;
+    if (reconnectRunning) return;
+    reconnectRunning = true;
+    if (createInternalTask(ossmReconnectTask, "ossmReconnect",
+                           8 * configMINIMAL_STACK_SIZE, nullptr, 1, nullptr,
+                           1) != pdPASS) {
+        reconnectRunning = false;
+        fireStateMachineDoneEvent();
+    }
+}
+
+void stopOssmReconnect() { reconnectCancelled = true; }
 
 static void ossmUpdateTask(void *) {
     ESP_LOGW(UPDATE_TAG, "[MEM] request: internal free=%u largest=%u",

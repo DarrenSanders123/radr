@@ -288,7 +288,16 @@ struct ossm_remote_state {
             "ossm_update_updating"_s + event<ossm_state_event>[ossmInState<>("update.idle")] = "main_menu"_s,
             "ossm_update_updating"_s + event<ossm_state_event>[ossmLeftUpdate<>] = "main_menu"_s,
             "ossm_update_updating"_s + event<disconnected_event> / (disconnectQuiet, startOssmRebootWait),
-            "ossm_update_updating"_s + event<done> / disconnectQuiet = "device_search"_s,
+            "ossm_update_updating"_s + event<done> / disconnectQuiet = "ossm_reconnect"_s,
+
+            // The OSSM restarts to update: look for it again and reconnect
+            // by itself. Cancel gives up and goes to the menu.
+            "ossm_reconnect"_s + on_entry<_> / (drawPage(ossmReconnectPage), startReconnect),
+            "ossm_reconnect"_s + event<connected_event> = "device_draw_control"_s,
+            "ossm_reconnect"_s + event<connected_error_event> / disconnectQuiet,
+            "ossm_reconnect"_s + event<left_button_pressed> / disconnect = "main_menu"_s,
+            "ossm_reconnect"_s + event<done> = "device_search"_s,
+            "ossm_reconnect"_s + boost::sml::on_exit<_> / stopReconnect,
             "ossm_update_updating"_s + event<left_button_pressed> / disconnect = "main_menu"_s,
             "ossm_update_updating"_s + boost::sml::on_exit<_> / cancelOssmUpdateWait,
 

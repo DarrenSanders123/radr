@@ -20,6 +20,9 @@
 static const char *TAG_COMS = "COMS";
 
 static const NimBLEAdvertisedDevice *advDevice;
+static std::string lastAddress;
+
+std::string lastConnectedAddress() { return lastAddress; }
 static bool doConnect = false;
 static uint32_t scanTimeMs =
     0; /** scan time in milliseconds, 0 = scan forever */
@@ -242,6 +245,7 @@ void connectToDiscoveredDevice(int index) {
 
     // Create device instance
     advDevice = selectedDevice.advertisedDevice;
+    lastAddress = selectedDevice.advertisedDevice->getAddress().toString();
     device = (*selectedDevice.factory)(selectedDevice.advertisedDevice);
 }
 

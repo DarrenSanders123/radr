@@ -97,6 +97,7 @@ extern const TextPage ossmUnsupportedPage;
 // OSSM Update Pages (defined in ossmUpdate.cpp)
 extern const TextPage ossmUpdateCheckPage;
 extern const TextPage ossmUpdateUpdatingPage;
+extern const TextPage ossmReconnectPage;
 extern const TextPage ossmUpdateNonePage;
 extern const TextPage ossmUpdateWifiPage;
 extern const TextPage ossmUpdateFailedPage;

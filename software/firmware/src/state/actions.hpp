@@ -280,7 +280,7 @@ namespace actions {
         if (ossmUpdateTimer != nullptr) {
             xTimerDelete(ossmUpdateTimer, 0);
         }
-        ossmUpdateTimer = xTimerCreate("ossmReboot", pdMS_TO_TICKS(60000),  // an update takes about a minute
+        ossmUpdateTimer = xTimerCreate("ossmReboot", pdMS_TO_TICKS(8000),  // then the remote scans for it again
                                        pdFALSE, nullptr, [](TimerHandle_t) {
                                            ossmUpdateTimer = nullptr;
                                            fireStateMachineDoneEvent();
@@ -344,6 +344,8 @@ namespace actions {
     inline auto resetOssmObserved = []() { resetOssmObservedState(); };
 
     inline auto startOssmUpdate = []() { startOssmUpdateRequest(); };
+    inline auto startReconnect = []() { startOssmReconnect(); };
+    inline auto stopReconnect = []() { stopOssmReconnect(); };
 
     inline auto startOssmPairing = []() { startOssmPairingRequest(); };
 
