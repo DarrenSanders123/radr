@@ -48,6 +48,7 @@ namespace Colors {
 namespace LEDColors {
     constexpr int logoBlue = 150;
     constexpr int connected = 96;
+    constexpr int updating = 24;  // amber: an OSSM is installing an update
     constexpr int idle = 180;  // Cool white-ish hue
 }
 

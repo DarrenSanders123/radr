@@ -26,8 +26,8 @@ const TextPage ossmUpdateCheckPage = {
 const TextPage ossmUpdateUpdatingPage = {
     .title = "Updating OSSM",
     .description =
-        "Your OSSM is downloading and installing an update. "
-        "Please wait...",
+        "Your OSSM is installing an update. Do not turn it off or "
+        "restart it. It restarts by itself when it is done.",
 };
 
 const TextPage ossmUpdateNonePage = {

@@ -115,6 +115,9 @@ struct ossm_remote_state {
             "wmConfig"_s + event<wifi_connected> / drawPage(wifiConnectedPage),
             "wmConfig"_s + boost::sml::on_exit<_> / stopWiFiPortal,
 
+            "main_menu"_s + event<ossm_state_event>[ossmUpdateRunning<>] = "ossm_update_updating"_s,
+            "device_draw_control"_s + event<ossm_state_event>[ossmUpdateRunning<>] = "ossm_update_updating"_s,
+            "simple_penetration_control"_s + event<ossm_state_event>[ossmUpdateRunning<>] = "ossm_update_updating"_s,
             "device_draw_control"_s + on_entry<_> / drawControl,
             "device_draw_control"_s + event<right_button_pressed>[hasDeviceMenu<>] = "device_menu"_s,
             "device_draw_control"_s + event<left_button_pressed>[canOpenSettings && hasMachineSettings] / beginOssmSettings = "ossm_settings"_s,
@@ -278,8 +281,10 @@ struct ossm_remote_state {
             "ossm_update_available"_s + event<left_button_pressed> = "main_menu"_s,
             "ossm_update_available"_s + event<disconnected_event> / disconnect = "main_menu"_s,
 
-            "ossm_update_updating"_s + on_entry<_> / (drawPage(ossmUpdateUpdatingPage), startOssmUpdateWait),
+            "ossm_update_updating"_s + on_entry<_> / (drawPage(ossmUpdateUpdatingPage), startOssmUpdateWait, []() { setLed(LEDColors::updating, 255, 700); }),
             "ossm_update_updating"_s + event<ossm_state_event>[ossmInState<>("update.failed")] / drawOssmUpdateFailed = "ossm_update_failed"_s,
+            "ossm_update_updating"_s + event<ossm_state_event>[ossmInState<>("update.idle")] = "main_menu"_s,
+            "ossm_update_updating"_s + event<ossm_state_event>[ossmLeftUpdate<>] = "main_menu"_s,
             "ossm_update_updating"_s + event<disconnected_event> / (disconnectQuiet, startOssmRebootWait),
             "ossm_update_updating"_s + event<done> / disconnectQuiet = "device_search"_s,
             "ossm_update_updating"_s + event<left_button_pressed> / disconnect = "main_menu"_s,

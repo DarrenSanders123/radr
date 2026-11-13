@@ -116,6 +116,22 @@ auto ossmInState = [](const char *state) {
     };
 };
 
+// The OSSM is checking for or installing a firmware update.
+template <typename Event = ossm_state_event>
+const auto ossmUpdateRunning = [](const Event &event) -> bool {
+    const OssmObservedState observed = getOssmObservedState();
+    return observed.valid && (observed.info.state == "update.checking" ||
+                              observed.info.state == "update.installing");
+};
+
+// The OSSM reports a state that is no longer an update one (it finished or
+// gave up without restarting).
+template <typename Event = ossm_state_event>
+const auto ossmLeftUpdate = [](const Event &event) -> bool {
+    const OssmObservedState observed = getOssmObservedState();
+    return observed.valid && !ossmStateStartsWith(observed.info.state, "update");
+};
+
 // Pairing finished: the OSSM is in its pairing flow and reports isPaired.
 template <typename Event = ossm_state_event>
 const auto ossmPairingDone = [](const Event &event) -> bool {
