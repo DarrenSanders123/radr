@@ -12,6 +12,11 @@
 #include "constants/Version.h"
 #include "services/ble_lifecycle.h"
 #include "state/remote.h"
+#include <pages/displayUtils.h>
+#include <pages/genericPages.h>
+#include <services/leds.h>
+#include <utils/psramTask.h>
+#include "pages/TextPages.h"
 
 #ifndef FIRMWARE_BUILD_SHA
 #define FIRMWARE_BUILD_SHA "unknown"
@@ -38,6 +43,39 @@
 #endif
 
 namespace {
+
+// An update installed at start-up (before the menus exist) shows this notice
+// with the download progress, and flashes the LEDs cyan like the OSSM does, so
+// nobody switches the remote off halfway.
+const TextPage bootUpdatePage = {
+    .title = "Updating",
+    .description = "Installing an update. Do not turn the remote off.",
+};
+bool bootNoticeShown = false;
+
+void showBootUpdateNotice(std::uint32_t done, std::uint32_t total) {
+    if (stateMachine != nullptr) return;  // the menus draw their own screens
+    if (!bootNoticeShown) {
+        bootNoticeShown = true;
+        clearPage();
+        createPsramTask(drawPageTask, "drawPageTask", 5 * configMINIMAL_STACK_SIZE,
+                        const_cast<TextPage *>(&bootUpdatePage), 5, NULL, 1);
+        vTaskDelay(pdMS_TO_TICKS(150));
+    }
+    static uint32_t lastTick = 0;
+    const uint32_t now = millis();
+    if (now - lastTick >= 500) {
+        lastTick = now;
+        setLed(128, (now / 500) % 2 == 0 ? 255 : 20, 400);  // cyan flash
+    }
+    static int lastPercent = -1;
+    const int percent = total == 0 ? 0 : static_cast<int>((done * 100ULL) / total);
+    if (percent / 5 != lastPercent / 5) {
+        lastPercent = percent;
+        updateStatusText("Installing an update: " + String(percent) +
+                         "%. Do not turn the remote off.");
+    }
+}
 
 constexpr const char *UPDATE_TAG = "UPDATE";
 firmware::Decision pendingDecision;
@@ -315,6 +353,7 @@ bool fleetInstallUpdateImpl(String &detail) {
     }
 
     firmware::installProgressHook = [](std::uint32_t done, std::uint32_t total) {
+        showBootUpdateNotice(done, total);
         static std::uint32_t lastFifth = 99;
         const std::uint32_t fifth = total == 0 ? 0 : (done * 5ULL) / total;
         if (done == 0 || fifth != lastFifth) {
