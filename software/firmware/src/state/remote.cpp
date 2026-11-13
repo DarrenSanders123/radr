@@ -20,7 +20,7 @@ static void ossmWatchTask(void *)
 {
     while (true)
     {
-        vTaskDelay(pdMS_TO_TICKS(2000));
+        vTaskDelay(pdMS_TO_TICKS(1000));
         if (stateMachine == nullptr || device == nullptr || !device->isConnected)
             continue;
         if (!(stateMachine->is("main_menu"_s) ||
