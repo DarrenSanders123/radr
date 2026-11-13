@@ -266,7 +266,9 @@ struct ossm_remote_state {
 #endif
             "ossm_update_check"_s + event<task_failed_event> / drawOssmUpdateOutOfMemory = "ossm_update_failed"_s,
             "ossm_update_check"_s + event<left_button_pressed> = "main_menu"_s,
-            "ossm_update_check"_s + event<disconnected_event> / disconnect = "main_menu"_s,
+            // The OSSM restarts to update, which drops the link while it checks:
+            // keep the "do not restart" screen and wait for it to come back.
+            "ossm_update_check"_s + event<disconnected_event> / (disconnectQuiet, startOssmRebootWait) = "ossm_update_updating"_s,
 
 #ifdef FLEET_SERVER
             "ossm_dashboard_update"_s + on_entry<_> / (drawPage(ossmDashboardUpdatePage), fleetAskMachineUpdate),
